@@ -1,4 +1,5 @@
 import re
+from typing import Any as tAny, Dict
 
 from genie.metaparser import MetaParser
 from genie.metaparser.util.schemaengine import Any, Optional, Or
@@ -1252,6 +1253,106 @@ class ShowApCdpNeighbor(ShowApCdpNeighborSchema):
                 continue
 
         return ap_cdp_neighbor_dict
+
+
+# ================================================
+# Schema for:
+#  * 'show ap meraki monitoring summary'
+# ================================================
+class ShowApMerakiMonitoringSummarySchema(MetaParser):
+    """Schema for show ap meraki monitoring summary."""
+
+    schema = {
+        "meraki_monitoring": {
+            "monitoring_status": str,
+            "supported_ap_count": int,
+            Optional("aps"): {
+                str: {
+                    Optional("ap_model"): str,
+                    Optional("radio_mac"): str,
+                    Optional("mac_address"): str,
+                    Optional("serial_number"): str,
+                    Optional("cloud_id"): str,
+                    Optional("status"): str,
+                }
+            },
+        }
+    }
+
+
+# ================================================
+# Parser for:
+#  * 'show ap meraki monitoring summary'
+# ================================================
+class ShowApMerakiMonitoringSummary(ShowApMerakiMonitoringSummarySchema):
+    """Parser for show ap meraki monitoring summary"""
+
+    cli_command = "show ap meraki monitoring summary"
+
+    def cli(self, output=None):
+        if output is None:
+            out = self.device.execute(self.cli_command)
+        else:
+            out = output
+
+        result_dict: Dict[str, tAny] = {
+            "meraki_monitoring": {
+                "monitoring_status": "",
+                "supported_ap_count": 0,
+            }
+        }
+
+        monitoring_capture = re.compile(
+            r"^Meraki\s+Monitoring\s*:\s*(?P<status>.+)$"
+        )
+        supported_capture = re.compile(
+            r"^Number\s+of\s+Supported\s+APs\s*:\s*(?P<count>\d+)"
+        )
+        row_capture = re.compile(
+            r"^(?P<ap_name>\S+)\s+"
+            r"(?P<ap_model>\S+)\s+"
+            r"(?P<radio_mac>\S+)\s+"
+            r"(?P<mac_address>\S+)\s+"
+            r"(?P<serial_number>\S+)\s+"
+            r"(?P<cloud_id>\S+)\s+"
+            r"(?P<status>.+)"
+        )
+
+        aps: Dict[str, Dict[str, tAny]] = {}
+
+        for line in out.splitlines():
+            line = line.rstrip()
+            if not line:
+                continue
+
+            monitoring_match = monitoring_capture.match(line)
+            if monitoring_match:
+                result_dict["meraki_monitoring"][
+                    "monitoring_status"
+                ] = monitoring_match.group("status").strip()
+                continue
+
+            supported_match = supported_capture.match(line)
+            if supported_match:
+                result_dict["meraki_monitoring"][
+                    "supported_ap_count"
+                ] = int(supported_match.group("count"))
+                continue
+
+            if line.startswith("AP Name") or line.startswith("---"):
+                continue
+
+            row_match = row_capture.match(line)
+            if row_match:
+                groups = row_match.groupdict()
+                ap_name = groups.pop("ap_name")
+                aps[ap_name] = {key: value.strip() for key, value in groups.items()}
+                continue
+
+        if aps:
+            result_dict["meraki_monitoring"]["aps"] = aps
+
+        return result_dict
 
 
 # =============================
