@@ -1,5 +1,4 @@
 import re
-from typing import Any as tAny, Dict
 
 from genie.metaparser import MetaParser
 from genie.metaparser.util.schemaengine import Any, Optional, Or
@@ -1295,19 +1294,18 @@ class ShowApMerakiMonitoringSummary(ShowApMerakiMonitoringSummarySchema):
         else:
             out = output
 
-        result_dict: Dict[str, tAny] = {
-            "meraki_monitoring": {
-                "monitoring_status": "",
-                "supported_ap_count": 0,
-            }
-        }
+        # initial return dictionary
+        result_dict = {}
 
+        # Meraki Monitoring          : Disabled
         monitoring_capture = re.compile(
             r"^Meraki\s+Monitoring\s*:\s*(?P<status>.+)$"
         )
+        # Number of Supported APs    : 58
         supported_capture = re.compile(
             r"^Number\s+of\s+Supported\s+APs\s*:\s*(?P<count>\d+)"
         )
+        # lab-ap-01   C9136I-B   0011.2233.0001 0011.2233.1001 TST00000001   Q2ZZ-0001-AAAA   Registered
         row_capture = re.compile(
             r"^(?P<ap_name>\S+)\s+"
             r"(?P<ap_model>\S+)\s+"
@@ -1318,8 +1316,6 @@ class ShowApMerakiMonitoringSummary(ShowApMerakiMonitoringSummarySchema):
             r"(?P<status>.+)"
         )
 
-        aps: Dict[str, Dict[str, tAny]] = {}
-
         for line in out.splitlines():
             line = line.rstrip()
             if not line:
@@ -1327,16 +1323,16 @@ class ShowApMerakiMonitoringSummary(ShowApMerakiMonitoringSummarySchema):
 
             monitoring_match = monitoring_capture.match(line)
             if monitoring_match:
-                result_dict["meraki_monitoring"][
-                    "monitoring_status"
-                ] = monitoring_match.group("status").strip()
+                meraki_dict = result_dict.setdefault("meraki_monitoring", {})
+                meraki_dict["monitoring_status"] = \
+                    monitoring_match.group("status").strip()
                 continue
 
             supported_match = supported_capture.match(line)
             if supported_match:
-                result_dict["meraki_monitoring"][
-                    "supported_ap_count"
-                ] = int(supported_match.group("count"))
+                meraki_dict = result_dict.setdefault("meraki_monitoring", {})
+                meraki_dict["supported_ap_count"] = \
+                    int(supported_match.group("count"))
                 continue
 
             if line.startswith("AP Name") or line.startswith("---"):
@@ -1346,11 +1342,12 @@ class ShowApMerakiMonitoringSummary(ShowApMerakiMonitoringSummarySchema):
             if row_match:
                 groups = row_match.groupdict()
                 ap_name = groups.pop("ap_name")
-                aps[ap_name] = {key: value.strip() for key, value in groups.items()}
+                meraki_dict = result_dict.setdefault("meraki_monitoring", {})
+                aps = meraki_dict.setdefault("aps", {})
+                aps[ap_name] = {
+                    key: value.strip() for key, value in groups.items()
+                }
                 continue
-
-        if aps:
-            result_dict["meraki_monitoring"]["aps"] = aps
 
         return result_dict
 
